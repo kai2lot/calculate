@@ -81,9 +81,33 @@ python main.py
 1. **데이터 구조 (`Grid2D` 클래스)**
    - `n×n` 크기의 2차원 배열을 캡슐화하여 저장하며, `get(row, col)`과 `set(row, col, value)` 메서드로 특정 위치의 값을 안전하게 읽고 쓸 수 있습니다.
    - 생성 시 행 개수, 각 행의 열 개수, 원소의 숫자(`float`) 변환 가능 여부를 엄격히 검증하며, 최소 `3×3`, `5×5`, `13×13`, `25×25` 및 임의의 `N×N` 크기를 모두 지원합니다.
-2. **라벨 정규화 (`normalize_label` 함수)**
+2. **라벨 정규화 (`normalize_label` 함수 및 `LABEL_NORMALIZATION_MAP`)**
    - 프로그램 내부의 표준 라벨을 **`Cross`**와 **`X`** 두 가지로 통일했습니다.
    - `data.json`의 `filters` 키(`"cross"` → `"Cross"`, `"x"` → `"X"`)와 `patterns`의 `expected` 값(`"+"` → `"Cross"`, `"x"` → `"X"`, 대소문자 및 공백 무시)을 모두 표준 라벨로 변환한 뒤 판정 및 `PASS`/`FAIL` 비교를 수행합니다.
+
+### 3.1 신규 라벨 및 표기 추가·확장 절차 (입력 표기 → `normalize_label` 확장 → 패턴/필터 테스트 → 리포트 반영)
+
+외부 데이터(`data.json`)의 스키마가 변경되어 새로운 라벨 표기(예: `"plus"`, `"십자가"`, `"×"`)나 신규 도형 클래스가 추가될 경우, 아래 **4단계 표준 절차(테스트·정규화·문서화 순서)**에 따라 확장합니다.
+
+| 단계 | 작업 구분 | 수행 내용 및 검증 대상 |
+| :---: | :---: | :--- |
+| **1단계** | **입력 표기 확인 및 정의** | • `data.json`의 `filters` 키와 `patterns.{id}.expected`에서 새로 유입되는 원시 문자열 표기(예: `"plus"`, `"십자가"`, `"×"`)를 수집합니다.<br/>• 앞뒤 공백 제거(`.strip()`) 및 소문자 변환(`.lower()`) 후 기존 표기와 충돌하지 않는지 확인합니다. |
+| **2단계** | **`normalize_label` 확장** | • `main.py`의 `LABEL_NORMALIZATION_MAP` 사전에 `{"신규표기": "표준라벨"}`을 추가하거나 `register_label_alias("plus", "Cross")`를 호출합니다.<br/>• 만약 제3의 도형 라벨(예: `"Circle"`) 자체를 새로 추가하는 경우 `STANDARD_LABELS` 튜플에 표준 라벨을 먼저 등록한 뒤 매핑을 추가합니다. |
+| **3단계** | **패턴/필터 테스트** | • **단위 테스트**: `normalize_label("plus") == "Cross"` 및 미등록 표기 입력 시 `ValueError`가 정상 발생하는지 검증합니다.<br/>• **통합 테스트**: 신규 표기가 적용된 필터/패턴 케이스를 `data.json`에 구성하고 `python main.py`(모드 2)를 실행하여 필터 로드(`✓ size_N 필터 로드 완료`)와 패턴 판정(`PASS`/`FAIL`)이 비정상 종료 없이 수행되는지 확인합니다. |
+| **4단계** | **결과 리포트 반영** | • `README.md`의 **라벨 정규화 매핑 표**에 신규 입력 표기를 추가합니다.<br/>• **결과 리포트(4.1절)**의 테스트 총합(총 테스트/통과/실패 수)과 스키마·라벨 정규화 효과 분석 내용을 최신 실행 결과에 맞게 업데이트합니다. |
+
+```python
+# [확장 예시] "plus"와 "×" 표기를 추가하고 즉시 검증하는 코드 절차
+from main import register_label_alias, normalize_label
+
+# 1~2단계: 신규 입력 표기를 normalize_label 매핑 테이블에 등록
+register_label_alias("plus", "Cross")
+register_label_alias("×", "X")
+
+# 3단계: 단위 테스트 검증 (4단계: 검증 완료 후 README 리포트에 반영)
+assert normalize_label(" PLUS ") == "Cross"
+assert normalize_label("×") == "X"
+```
 3. **MAC 연산 직접 구현 (`mac_compute_2d` & `mac_compute_1d`)**
    - `NumPy` 등 벡터화 라이브러리를 일절 사용하지 않고, 중첩 `for` 반복문을 통해 동일 위치 `(r, c)`의 패턴 값과 필터 값을 곱하고 누적 합산(`total += pattern.get(r, c) * filter_grid.get(r, c)`)하여 `float` 점수를 반환합니다.
 4. **점수 비교 정책 (`compare_scores`, 허용오차 $\epsilon = 10^{-9}$)**

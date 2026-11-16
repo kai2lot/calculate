@@ -125,14 +125,48 @@ def generate_x_pattern(n: int) -> Grid2D:
 
 
 # =====================================================================
-# 라벨 정규화 (표준 라벨: Cross, X)
+# 라벨 정규화 (표준 라벨: Cross, X) 및 신규 표기 확장 절차
 # =====================================================================
+# [새 라벨/표기 추가 시 4단계 확장 절차]
+#   1단계 (입력 표기 확인): data.json(filters 키, patterns.expected 값)에서 새로 유입되는
+#          원시 표기(예: "plus", "십자가", "×", 또는 신규 도형 라벨)를 식별한다.
+#   2단계 (normalize_label 확장): 아래 LABEL_NORMALIZATION_MAP 사전에
+#          '소문자_공백제거_입력표기: 표준라벨' 매핑을 추가(또는 register_label_alias 호출)한다.
+#   3단계 (패턴/필터 테스트): 새 표기가 포함된 필터 및 패턴 테스트 케이스에 대해
+#          normalize_label() 단위 검증과 run_mode_2() 통합 판정(PASS/FAIL)을 수행한다.
+#   4단계 (리포트 반영): README.md의 '라벨 정규화 규칙 표'와 '결과 리포트(정규화 효과 및
+#          통과/실패 분석)' 섹션에 추가된 표기 및 테스트 결과를 문서화한다.
+STANDARD_LABELS: tuple[str, ...] = ("Cross", "X")
+
+LABEL_NORMALIZATION_MAP: dict[str, str] = {
+    "+": "Cross",
+    "cross": "Cross",
+    "x": "X",
+}
+
+
+def register_label_alias(raw_alias: str, standard_label: str) -> None:
+    """신규 입력 표기(alias)를 표준 라벨에 동적으로 등록한다 (확장 절차 2단계 지원)."""
+    if standard_label not in STANDARD_LABELS:
+        raise ValueError(
+            f"지원하지 않는 표준 라벨입니다: {standard_label!r} (허용: {STANDARD_LABELS})"
+        )
+    cleaned_alias = raw_alias.strip().lower()
+    if not cleaned_alias:
+        raise ValueError("빈 문자열은 라벨 표기로 등록할 수 없습니다.")
+    LABEL_NORMALIZATION_MAP[cleaned_alias] = standard_label
+
+
 def normalize_label(raw_label: Any) -> str:
     """입력 라벨이나 필터 키를 표준 라벨('Cross' 또는 'X')로 정규화한다.
 
-    규칙:
-      - expected 값: '+' -> 'Cross', 'x' -> 'X' (대소문자 및 'cross' 포함)
+    기본 정규화 규칙:
+      - expected 값: '+' -> 'Cross', 'x' -> 'X' (대소문자 및 앞뒤 공백 무시, 'cross' 포함)
       - filter 키: 'cross' -> 'Cross', 'x' -> 'X'
+
+    신규 표기 확장 순서:
+      입력 표기 정의 -> LABEL_NORMALIZATION_MAP / normalize_label 확장
+      -> 패턴/필터 테스트 검증 -> README 결과 리포트 반영
     """
     if not isinstance(raw_label, str):
         raise ValueError(f"라벨이 문자열이 아닙니다: {raw_label!r}")
@@ -141,7 +175,10 @@ def normalize_label(raw_label: Any) -> str:
         return "Cross"
     if cleaned == "x":
         return "X"
-    raise ValueError(f"알 수 없는 라벨 형식입니다: {raw_label!r} (허용: '+', 'cross', 'x')")
+    if cleaned in LABEL_NORMALIZATION_MAP:
+        return LABEL_NORMALIZATION_MAP[cleaned]
+    allowed = ", ".join(f"'{k}'" for k in LABEL_NORMALIZATION_MAP)
+    raise ValueError(f"알 수 없는 라벨 형식입니다: {raw_label!r} (허용: {allowed})")
 
 
 # =====================================================================
