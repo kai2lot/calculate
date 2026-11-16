@@ -182,10 +182,19 @@ def normalize_label(raw_label: Any) -> str:
 
 
 # =====================================================================
-# MAC (Multiply-Accumulate) 연산 (외부 라이브러리 없이 직접 구현)
+# MAC (Multiply-Accumulate) 연산 및 유사도(점수) 계산 원리 (외부 라이브러리 금지)
 # =====================================================================
+# [유사도 판정 원리 - 점수가 높을수록 유사함(비교 기준)]
+#   입력 패턴과 필터의 동일한 위치 (r, c)에 있는 값을 곱하고 모두 더하면(MAC 연산),
+#   두 배열에서 값이 활성화된(1 또는 양수 가중치) 위치가 서로 많이 겹칠수록 누적 합계가 커진다.
+#   따라서 'MAC 점수가 높을수록 입력과 필터가 유사하다'는 것을 의미하며,
+#   두 필터(Cross, X)의 MAC 점수를 비교할 때 '점수가 높을수록 유사함(비교 기준)'을 적용해
+#   더 높은 점수를 얻은 필터의 라벨로 최종 형태를 판정한다.
 def mac_compute_2d(pattern: Grid2D, filter_grid: Grid2D) -> float:
-    """2차원 패턴과 필터의 위치별 곱셈 누적합(MAC)을 이중 반복문으로 계산한다."""
+    """2차원 패턴과 필터의 위치별 곱셈 누적합(MAC)을 이중 반복문으로 계산한다.
+
+    유사도 기준: MAC 점수가 높을수록 입력과 필터가 유사하다 (점수가 높을수록 유사함).
+    """
     if pattern.size != filter_grid.size:
         raise ValueError(
             f"패턴 크기({pattern.size}×{pattern.size})와 "
@@ -223,7 +232,11 @@ def compare_scores(
     undecided_label: str = "UNDECIDED",
     epsilon: float = EPSILON,
 ) -> str:
-    """허용오차(epsilon) 기반으로 두 점수를 비교하여 판정 라벨을 반환한다."""
+    """허용오차(epsilon) 기반으로 두 점수를 비교하여 판정 라벨을 반환한다.
+
+    비교 기준: 점수가 높을수록 유사함(비교 기준) — 즉, MAC 점수가 높을수록 입력과 필터가 유사하다.
+    단, 두 점수의 차이가 허용오차(epsilon = 1e-9) 미만이면 부동소수점 오차 범위 내 동점(UNDECIDED)으로 간주한다.
+    """
     if abs(score_a - score_b) < epsilon:
         return undecided_label
     return label_a if score_a > score_b else label_b
